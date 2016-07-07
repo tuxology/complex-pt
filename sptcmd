@@ -1,0 +1,93 @@
+#!/bin/bash
+# simple pt trace a command
+
+usage() {
+	cat <<EOU
+PT Assist is a wrapper script to get meta information ready for PT and 
+EOU
+	exit 1
+}
+
+COMM="$@"
+ENUMALL=1
+
+C=/sys/module/simple_pt/parameters
+#if [ -n "$COMM" ] ; then
+#	echo $COMM > $C/comm_filter
+#	echo 1 > $C/cr3_filter
+#else
+	echo > $C/comm_filter
+#	echo 0 > $C/cr3_filter
+#fi
+
+# Trace for cr3s mapping
+T=/sys/kernel/debug/tracing
+# echo $TRACE > $T/events/pttp/msr/enable
+echo 1 > $T/events/pttp/exec_cr3/enable
+echo 1 > $T/events/pttp/mmap_cr3/enable
+echo 1 > $T/events/pttp/process_cr3/enable
+
+# Intial maps for all procs
+echo $ENUMALL > $C/enumerate_all
+if [ "$ENUMALL" != 0 ] ; then
+	grep . /proc/[0-9]*/maps > meta.maps
+	echo >&2 "Wrote initial process maps to meta.maps"
+else
+	echo -n > meta.maps
+fi
+
+#ptfeature > ${PREFIX}.cpuid
+#echo 1 > $C/start
+#if [ "$ENABLE_ONLY" != "" ] ; then
+#	exit 0
+#fi
+#"$@"
+#if [ "$PRINT_REGS" != 0 ] ; then
+#	ptregs
+#fi
+#echo 0 > $C/start
+#if [ -z "$KEEP" ] ; then
+
+echo 0 > $T/events/pttp/exec_cr3/enable
+echo 0 > $T/events/pttp/mmap_cr3/enable
+echo 0 > $T/events/pttp/process_cr3/enable
+echo 0 > $T/events/pttp/msr/enable
+
+echo >&2 "Starting perf.."
+
+/home/suchakra/Projects/hani/git/linux/tools/perf/perf record -e intel_pt//k -a $COMM
+
+echo >&2 "Extracting PT data from perf.."
+./ptparse
+
+# postprocess it and save as meta
+./sptsideband.py $T/trace meta.maps >> pt.meta
+
+#fi
+#if [ -z "$DONTDUMP" ] ; then
+#	sptdump $PREFIX
+
+#	ptfeature > ${PREFIX}.cpuid
+
+
+#	sptsideband.py $T/trace ${PREFIX}.maps ${PREFIX}.cpuid $MTC_FREQ > ${PREFIX}.sideband
+
+#	if [ "$TRACE" != 0 ] ; then
+#		spttrace < $T/trace > ${PREFIX}.trace
+#	fi
+
+	#if [ -r /boot/vmlinux-$(uname -r) ] ; then
+	#	echo -e "0.0 0 0 0\t/boot/vmlinux-$(uname -r)" >> ${PREFIX}.sideband
+	#elif [ -r /lib/modules/$(uname -r)/build/vmlinux ] ; then
+	#	echo -e "0.0 0 0 0\t/lib/modules/$(uname -r)/build/vmlinux" >> ${PREFIX}.sideband
+	#else
+	#	echo "vmlinux not found"
+	#fi
+
+	#shopt -s globstar
+	#while read name a b c d addr ; do
+	#	name=$(echo $name | sed s/_/?/g)
+	#	echo -e "0.0 0" $addr 0 "\t" /lib/modules/$(uname -r)/**/${name}.ko
+	#done < /proc/modules >> ${PREFIX}.sideband
+#	echo "Wrote sideband to ${PREFIX}.sideband"
+#fi
